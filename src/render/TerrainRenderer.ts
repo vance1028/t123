@@ -20,6 +20,7 @@ export class TerrainRenderer {
   private controls: OrbitControls;
   private verticalScale: number;
 
+  private rootGroup: THREE.Group;
   private terrainMesh: THREE.Mesh | null = null;
   private terrainGeometry: THREE.PlaneGeometry | null = null;
   private wireframe: THREE.LineSegments | null = null;
@@ -39,6 +40,9 @@ export class TerrainRenderer {
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0xf0f4f8);
+
+    this.rootGroup = new THREE.Group();
+    this.scene.add(this.rootGroup);
 
     this.camera = new THREE.PerspectiveCamera(
       45,
@@ -163,7 +167,7 @@ export class TerrainRenderer {
     if (!this.grid) return;
 
     if (this.designSurface) {
-      this.scene.remove(this.designSurface);
+      this.rootGroup.remove(this.designSurface);
       this.designSurface.geometry.dispose();
       (this.designSurface.material as THREE.Material).dispose();
     }
@@ -181,10 +185,10 @@ export class TerrainRenderer {
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < cols; col++) {
         const x = this.grid.getX(col);
-        const y = this.grid.getY(row);
-        const h = design.getElevation(x, y);
+        const z = this.grid.getY(row);
+        const h = design.getElevation(x, z);
         const idx = row * cols + col;
-        positions.setY(idx, h * this.verticalScale);
+        positions.setXYZ(idx, x, h * this.verticalScale, z);
       }
     }
     positions.needsUpdate = true;
@@ -198,12 +202,12 @@ export class TerrainRenderer {
 
     this.designSurface = new THREE.Mesh(geom, material);
     this.designSurface.visible = this.showDesign;
-    this.scene.add(this.designSurface);
+    this.rootGroup.add(this.designSurface);
   }
 
   updateContours(contours: ContourLine[]): void {
     if (this.contourLines) {
-      this.scene.remove(this.contourLines);
+      this.rootGroup.remove(this.contourLines);
       this.contourLines.traverse(obj => {
         if (obj instanceof THREE.Line) {
           obj.geometry.dispose();
@@ -236,19 +240,19 @@ export class TerrainRenderer {
     }
 
     this.contourLines.visible = this.viewMode === 'contour';
-    this.scene.add(this.contourLines);
+    this.rootGroup.add(this.contourLines);
   }
 
   private updateTerrainMesh(): void {
     if (!this.grid) return;
 
     if (this.terrainMesh) {
-      this.scene.remove(this.terrainMesh);
+      this.rootGroup.remove(this.terrainMesh);
       this.terrainGeometry?.dispose();
       (this.terrainMesh.material as THREE.Material).dispose();
     }
     if (this.wireframe) {
-      this.scene.remove(this.wireframe);
+      this.rootGroup.remove(this.wireframe);
       this.wireframe.geometry.dispose();
       (this.wireframe.material as THREE.Material).dispose();
     }
@@ -268,9 +272,11 @@ export class TerrainRenderer {
     const positions = geometry.attributes.position;
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < cols; col++) {
+        const x = this.grid.getX(col);
+        const z = this.grid.getY(row);
         const h = this.grid.getHeight(col, row);
         const idx = row * cols + col;
-        positions.setY(idx, h * this.verticalScale);
+        positions.setXYZ(idx, x, h * this.verticalScale, z);
       }
     }
     positions.needsUpdate = true;
@@ -291,7 +297,7 @@ export class TerrainRenderer {
     this.terrainMesh = new THREE.Mesh(geometry, material);
     this.terrainMesh.receiveShadow = true;
     this.terrainMesh.castShadow = true;
-    this.scene.add(this.terrainMesh);
+    this.rootGroup.add(this.terrainMesh);
 
     const wireGeom = new THREE.WireframeGeometry(geometry);
     const wireMat = new THREE.LineBasicMaterial({
@@ -301,7 +307,9 @@ export class TerrainRenderer {
     });
     this.wireframe = new THREE.LineSegments(wireGeom, wireMat);
     this.wireframe.visible = this.showGrid;
-    this.scene.add(this.wireframe);
+    this.rootGroup.add(this.wireframe);
+
+    this.rootGroup.position.set(-width / 2, 0, -depth / 2);
 
     const gridSize = Math.max(width, depth);
     this.gridHelper = new THREE.GridHelper(gridSize * 1.2, 20, 0x888888, 0xcccccc);
@@ -325,16 +333,14 @@ export class TerrainRenderer {
     const depth = this.grid.getHeightTotal();
     const maxDim = Math.max(width, depth);
 
-    const centerX = width / 2;
-    const centerZ = depth / 2;
     const centerY = (this.grid.getMinHeight() + this.grid.getMaxHeight()) / 2 * this.verticalScale;
 
     this.camera.position.set(
-      centerX + maxDim * 0.8,
       maxDim * 0.8,
-      centerZ + maxDim * 0.8
+      maxDim * 0.8,
+      maxDim * 0.8
     );
-    this.controls.target.set(centerX, centerY, centerZ);
+    this.controls.target.set(0, centerY, 0);
     this.controls.update();
   }
 
