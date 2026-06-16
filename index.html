@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>场地平整土方计算工具</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    #app {
+      width: 100%;
+      height: 100%;
+      display: flex;
+    }
+    #canvas-container {
+      flex: 1;
+      position: relative;
+    }
+    #canvas-container canvas {
+      display: block;
+    }
+    #panel {
+      width: 360px;
+      background: #f5f7fa;
+      border-left: 1px solid #e4e7ed;
+      padding: 16px;
+      overflow-y: auto;
+      box-sizing: border-box;
+    }
+    .panel-section {
+      margin-bottom: 20px;
+    }
+    .panel-section h3 {
+      margin: 0 0 12px 0;
+      font-size: 14px;
+      color: #303133;
+      border-bottom: 1px solid #ebeef5;
+      padding-bottom: 6px;
+    }
+    .form-item {
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+    }
+    .form-item label {
+      width: 110px;
+      font-size: 12px;
+      color: #606266;
+      flex-shrink: 0;
+    }
+    .form-item input[type="number"],
+    .form-item select {
+      flex: 1;
+      padding: 4px 8px;
+      border: 1px solid #dcdfe6;
+      border-radius: 4px;
+      font-size: 12px;
+      box-sizing: border-box;
+    }
+    .form-item input[type="checkbox"] {
+      margin-right: 6px;
+    }
+    .btn {
+      display: inline-block;
+      padding: 6px 16px;
+      background: #409eff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .btn:hover {
+      background: #66b1ff;
+    }
+    .btn-secondary {
+      background: #909399;
+    }
+    .btn-secondary:hover {
+      background: #a6a9ad;
+    }
+    .btn-success {
+      background: #67c23a;
+    }
+    .btn-success:hover {
+      background: #85ce61;
+    }
+    .result-box {
+      background: white;
+      border: 1px solid #ebeef5;
+      border-radius: 4px;
+      padding: 12px;
+      margin-top: 8px;
+    }
+    .result-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 4px 0;
+      font-size: 12px;
+    }
+    .result-row .label {
+      color: #606266;
+    }
+    .result-row .value {
+      color: #303133;
+      font-weight: 600;
+    }
+    .cut { color: #f56c6c; }
+    .fill { color: #409eff; }
+    #balance-chart {
+      width: 100%;
+      height: 120px;
+      background: white;
+      border: 1px solid #ebeef5;
+      border-radius: 4px;
+    }
+    .view-mode-tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 10px;
+    }
+    .view-mode-tab {
+      flex: 1;
+      padding: 6px;
+      text-align: center;
+      background: #e4e7ed;
+      color: #606266;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .view-mode-tab.active {
+      background: #409eff;
+      color: white;
+    }
+    .hint {
+      font-size: 11px;
+      color: #909399;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="canvas-container"></div>
+    <div id="panel">
+      <div class="panel-section">
+        <h3>地形参数</h3>
+        <div class="form-item">
+          <label>网格宽度(X)</label>
+          <input type="number" id="grid-size-x" value="50" min="10" max="200" />
+        </div>
+        <div class="form-item">
+          <label>网格高度(Y)</label>
+          <input type="number" id="grid-size-y" value="40" min="10" max="200" />
+        </div>
+        <div class="form-item">
+          <label>单元大小(m)</label>
+          <input type="number" id="cell-size" value="5" min="1" max="20" step="0.5" />
+        </div>
+        <div class="form-item">
+          <label>地形起伏度</label>
+          <input type="number" id="terrain-roughness" value="15" min="0" max="50" step="1" />
+        </div>
+        <button class="btn" id="btn-generate">重新生成地形</button>
+      </div>
+
+      <div class="panel-section">
+        <h3>显示模式</h3>
+        <div class="view-mode-tabs">
+          <div class="view-mode-tab active" data-mode="elevation">高程</div>
+          <div class="view-mode-tab" data-mode="cutfill">挖填</div>
+          <div class="view-mode-tab" data-mode="contour">等高线</div>
+        </div>
+        <div class="form-item">
+          <label><input type="checkbox" id="show-grid" checked /> 显示网格线</label>
+        </div>
+        <div class="form-item">
+          <label><input type="checkbox" id="show-design" checked /> 显示设计面</label>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <h3>设计面</h3>
+        <div class="form-item">
+          <label>类型</label>
+          <select id="design-type">
+            <option value="horizontal">水平标高</option>
+            <option value="slope">倾斜坡面</option>
+          </select>
+        </div>
+        <div id="design-horizontal">
+          <div class="form-item">
+            <label>设计标高(m)</label>
+            <input type="number" id="design-elevation" value="20" step="0.5" />
+          </div>
+          <button class="btn btn-success" id="btn-balance-h">自动平衡标高</button>
+        </div>
+        <div id="design-slope" style="display:none">
+          <div class="form-item">
+            <label>中心标高(m)</label>
+            <input type="number" id="slope-center-elev" value="20" step="0.5" />
+          </div>
+          <div class="form-item">
+            <label>X向坡度(%)</label>
+            <input type="number" id="slope-x" value="1" step="0.1" />
+          </div>
+          <div class="form-item">
+            <label>Y向坡度(%)</label>
+            <input type="number" id="slope-y" value="0.5" step="0.1" />
+          </div>
+          <button class="btn btn-success" id="btn-balance-s">自动平衡坡面</button>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <h3>平整区域</h3>
+        <div class="form-item">
+          <label><input type="checkbox" id="use-polygon" /> 多边形区域</label>
+        </div>
+        <div class="form-item">
+          <label>放坡坡比</label>
+          <input type="number" id="slope-ratio" value="1.5" min="0.5" step="0.1" />
+        </div>
+        <div class="hint">坡比 = 水平距离 / 高差，例如 1.5 表示 1:1.5 放坡</div>
+        <button class="btn" id="btn-reset-polygon" style="margin-top:8px">重置为全场地</button>
+      </div>
+
+      <div class="panel-section">
+        <h3>土方计算结果</h3>
+        <div class="result-box">
+          <div class="result-row">
+            <span class="label">总挖方量</span>
+            <span class="value cut" id="result-cut">0.00 m³</span>
+          </div>
+          <div class="result-row">
+            <span class="label">总填方量</span>
+            <span class="value fill" id="result-fill">0.00 m³</span>
+          </div>
+          <div class="result-row">
+            <span class="label">平衡差(挖-填)</span>
+            <span class="value" id="result-diff">0.00 m³</span>
+          </div>
+          <div class="result-row">
+            <span class="label">平衡差率</span>
+            <span class="value" id="result-ratio">0.00%</span>
+          </div>
+          <div class="result-row">
+            <span class="label">平整面积</span>
+            <span class="value" id="result-area">0.00 m²</span>
+          </div>
+          <div class="result-row">
+            <span class="label">放坡土方</span>
+            <span class="value" id="result-slope">0.00 m³</span>
+          </div>
+        </div>
+        <button class="btn" id="btn-export" style="margin-top:10px">导出计算报告</button>
+      </div>
+
+      <div class="panel-section">
+        <h3>平衡差曲线</h3>
+        <canvas id="balance-chart" width="320" height="120"></canvas>
+        <div class="hint">横轴：设计标高，纵轴：平衡差(挖-填)</div>
+      </div>
+    </div>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
